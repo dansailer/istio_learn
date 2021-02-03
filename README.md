@@ -3,13 +3,13 @@ Following the [Learn Istio](https://istio.io/latest/docs/examples/microservices-
 
 ## PreReqs
 ### Create your own Kubernetes Cluster (free) and install ibm-cloud-cli
-Open a [IBM Cloud](https://cloud.ibm.com/docs/containers?topic=containers-getting-started) account to have access to the free managable Kubernetes cluster and create a free 30day available Kubernetes installation `learn-istio-free`
+Open a [IBM Cloud](https://cloud.ibm.com/docs/containers?topic=containers-getting-started) account to have access to the free managable Kubernetes cluster and create a free 30day available Kubernetes installation `learn-istio`
 
 
 ```sh
 brew install --cask ibm-cloud-cli
 ibmcloud login -a cloud.ibm.com -r us-south --sso 
-ibmcloud ks cluster config --cluster learn-istio-free
+ibmcloud ks cluster config --cluster learn-istio
 kubectl config current-context
 ```
 
@@ -25,8 +25,27 @@ mv istio-1.8.2/samples .
 rm -rf istio-1.8.2*
 ```
 
+### Install Kind for local testing and create cluster
+```sh
+brew install kind
+kind create cluster --name learn-istio
+kubectl config get-contexts
+```
+
 
 ## Installation
+Before executing these commands be sure to be connected to the right Kubernetes context.
+For IBM Cloud use
+
+```sh
+kubectl config use-context learn-istio
+```
+
+or for local Kind installation
+
+```sh
+kubectl config use-context kind-learn-istio
+```
 
 ### Create namespace and setup istio on namespace
 
