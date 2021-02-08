@@ -2,18 +2,51 @@
 Following the [Learn Istio](https://istio.io/latest/docs/examples/microservices-istio/) tutorial, gathering scripts and gists.
 
 ## Current Links (IBM Cloud)
-BookInfo: http://169.57.112.115:31213/productpage (this will change when cluster is deleted or recreated)
+The displayed IP and port are examples and not valid (anymore).
+BookInfo: http://169.57.112.115:31213/productpage
+
 Grafana: http://dashboard.169.57.112.115.xip.io:31213
+
 Jaeger: http://jaeger.169.57.112.115.xip.io:31213
+
 Prometheus: http://prometheus.169.57.112.115.xip.io:31213
+
 Kiali: http://kiali.169.57.112.115.xip.io:31213
+
 IBM Cloud: https://cloud.ibm.com/kubernetes/clusters
 
+
 ## PreReqs
-### Create your own Kubernetes Cluster (free) and install ibm-cloud-cli
+You will need a running Kubernetes Cluster. Here are 3 different options. 
+
+### Install istio-cli
+
+```
+brew install istioctl
+```
+
+
+### DigitalOcean
+
+Open a new [DigitalOcean](https://cloud.digitalocean.com/kubernetes) account to have access to 100$ of promotion credit (only available in the first month) and later would cost approximately 30$/month. Create a development Kubernetes installation `k8s-digitalocean-learn-istio`
+
+Download the kube config file from DigitalOcean and use it to connect kubectl to the new cluster as well as download the DigitalOcean cli `doctl`
+
+```
+brew install doctl
+export KUBECONFIG=~/.kube/config:$(pwd)/k8s-digitalocean-learn-istio-kubeconfig.yaml
+kubectl config use-context do-fra1-k8s-digitalocean-learn-istio
+kubectl config current-context
+```
+
+Access the [cluster](https://cloud.digitalocean.com/kubernetes/clusters/)
+
+
+
+### IBM Cloud free Kubernetes Cluster (30 days)
 Open a [IBM Cloud](https://cloud.ibm.com/docs/containers?topic=containers-getting-started) account to have access to the free managable Kubernetes cluster and create a free 30day available Kubernetes installation `learn-istio`
 
-```sh
+```
 brew install --cask ibm-cloud-cli
 ibmcloud login -a cloud.ibm.com -r us-south --sso 
 ibmcloud ks cluster config --cluster learn-istio
@@ -22,21 +55,12 @@ kubectl config current-context
 
 Access the [cluster](https://cloud.ibm.com/kubernetes/clusters)
 
-### Install istio-cli and download samples application
 
-```sh
-brew install istioctl
-curl -L -o istio-1.8.2-osx.tar.gz https://storage.googleapis.com/istio-release/releases/1.8.2/istio-1.8.2-osx.tar.gz
-tar -xzvf istio-1.8.2-osx.tar.gz istio-1.8.2/samples
-mv istio-1.8.2/samples .
-rm -rf istio-1.8.2*
-```
+### Kind - local Kubernetes cluster
 
+Before running kind, be sure to give Docker VM enough memory (~ 6 CPU and 9 GB RAM).
 
-### Install Kind for local testing and create cluster
-Be sure to give Docker VM enough memory (~ 6GB).
-
-`Docker - Preferences - Resources - Memory -> 6GB`
+`Docker - Preferences - Resources`
 
 ```sh
 brew install kind
@@ -50,25 +74,17 @@ Before executing these commands verify that at least one of these contexts are e
 
 ```
 kubectl config get-contexts
-CURRENT   NAME                               CLUSTER                            AUTHINFO                                                                             NAMESPACE
-*         kind-learn-istio                   kind-learn-istio                   kind-learn-istio                                                                     
-          learn-istio/c0d7ecdd07v2gejkeca0   learn-istio/c0d7ecdd07v2gejkeca0   XXXXXXXXXXXXX/iam.cloud.ibm.com-identity   default
+CURRENT   NAME                                   CLUSTER                                AUTHINFO                                                                             NAMESPACE
+*         do-fra1-k8s-digitalocean-learn-istio   do-fra1-k8s-digitalocean-learn-istio   do-fra1-k8s-digitalocean-learn-istio-admin                                           
+          kind-learn-istio                       kind-learn-istio                       kind-learn-istio                                                                     
+          learn-istio/c0d7ecdd07v2gejkeca0       learn-istio/c0d7ecdd07v2gejkeca0       XXXXXXXXXXXX/iam.cloud.ibm.com-identity   default
 ```
 
 
-Be sure to be connected to the right Kubernetes context for these commands to be executed at the right cluster.
-
-For IBM Cloud use
+Be sure to be connected to the right Kubernetes context (if you have several) for these commands to be executed at the right cluster.
 
 ```
-ibmcloud ks cluster config  --cluster learn-istio
-kubectl config current-context
-```
-
-or for local Kind installation
-
-```
-kubectl config use-context kind-learn-istio
+kubectl config use-context ...
 kubectl config current-context
 ```
 
@@ -84,8 +100,8 @@ kubectl label namespace $NAMESPACE istio-injection=enabled
 ### Install Demo application "BookInfo"
 
 ```
-kubectl apply -n $NAMESPACE -f samples/bookinfo/platform/kube/bookinfo.yaml
 kubectl apply -n $NAMESPACE -l version!=v2,version!=v3 -f https://raw.githubusercontent.com/istio/istio/release-1.8/samples/bookinfo/platform/kube/bookinfo.yaml
+
 
 kubectl get -n $NAMESPACE services
 kubectl rollout -n $NAMESPACE status deployment productpage-v1
@@ -96,16 +112,32 @@ kubectl exec -n $NAMESPACE "$(kubectl get -n $NAMESPACE pod -l app=ratings -o js
 ### Setup ingress gateway
 
 ```
-kubectl apply -n $NAMESPACE -f samples/bookinfo/networking/bookinfo-gateway.yaml
+kubectl apply -n $NAMESPACE -f https://raw.githubusercontent.com/istio/istio/release-1.8/samples/bookinfo/networking/bookinfo-gateway.yaml
 istioctl analyze -n $NAMESPACE
 kubectl get svc istio-ingressgateway -n istio-system
 ```
 
 ### Access the application via istio gateway
 
-Neither the free IBM Cloud (Ingress is not supported for free clusters.) nor Kind offer an external load balancer. We use Kubernetes node and node port instead to access the application.     
+Depending on your Cloud Provider you will have different access to the application.
 
-For IBM Cloud
+#### Digital Ocean
+
+The Digital Ocean environment has an external load balancer that can be used for the ingress gateway.
+
+```
+export INGRESS_HOST=$(kubectl -n istio-system get service istio-ingressgateway -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+export INGRESS_PORT=$(kubectl -n istio-system get service istio-ingressgateway -o jsonpath='{.spec.ports[?(@.name=="http2")].port}')
+export SECURE_INGRESS_PORT=$(kubectl -n istio-system get service istio-ingressgateway -o jsonpath='{.spec.ports[?(@.name=="https")].port}')
+export GATEWAY_URL=$INGRESS_HOST:$INGRESS_PORT
+echo "$GATEWAY_URL"
+open "http://$GATEWAY_URL/productpage"
+```
+
+#### IBM Cloud
+
+In the IBM Cloud Ingress is not supported for free clusters and so there is no external load balancer. We use Kubernetes node and node port instead to access the application.     
+
 ```
 export INGRESS_PORT=$(kubectl -n istio-system get service istio-ingressgateway -o jsonpath='{.spec.ports[?(@.name=="http2")].nodePort}')
 export INGRESS_HOST=$(ibmcloud ks workers --cluster learn-istio --output json | jq -rM .[0].publicIP)
@@ -113,7 +145,8 @@ export GATEWAY_URL=$INGRESS_HOST:$INGRESS_PORT
 open "http://$GATEWAY_URL/productpage"
 ```
 
-For Kind
+#### Kind
+
 ```
 export INGRESS_PORT=$(kubectl -n istio-system get service istio-ingressgateway -o jsonpath='{.spec.ports[?(@.name=="http2")].nodePort}')
 export INGRESS_HOST=$(kubectl get po -l istio=ingressgateway -n istio-system -o jsonpath='{.items[0].status.hostIP}')
@@ -124,7 +157,7 @@ open "http://$GATEWAY_URL/productpage"
 
 ### Deploy the Kiali dashboard, along with Prometheus, Grafana, and Jaeger
 
-Deploy the addons. Run command multiple times in case of messages such as `unable to recognize "samples/addons/kiali.yaml"`. From here on, the Kind commands are missing, as laptop is missing some power...
+Deploy the addons. Run command multiple times in case of messages such as `unable to recognize "samples/addons/kiali.yaml"`.
 
 ```
 kubectl apply -f samples/addons
@@ -142,6 +175,33 @@ istioctl dashboard envoy
 istioctl dashboard controlz
 ```
 
+
+Continue with 
+
+
+These tasks are a great place for beginners to further evaluate Istio’s features using this demo installation:
+https://istio.io/latest/docs/setup/getting-started/#next-steps
+https://istio.io/latest/docs/examples/microservices-istio/setup-kubernetes-cluster/
+
+[Request routing](https://istio.io/latest/docs/tasks/traffic-management/request-routing/)
+Fault injection
+Traffic shifting
+Querying metrics
+Visualizing metrics
+Accessing external services
+Visualizing your mesh
+Before you customize Istio for production use, see these resources:
+
+Deployment models
+Deployment best practices
+Pod requirements
+General installation instructions
+
+
+
+
+
+# Scrap Ideas
 ### Create ingress routes for Kiali, Grafana, Tracing and Prometheus
 
 For IBM Cloud only
@@ -201,30 +261,3 @@ The dasboards are now available using these DNS entries
 export INGRESS_PORT=$(kubectl -n istio-system get service istio-ingressgateway -o jsonpath='{.spec.ports[?(@.name=="http2")].nodePort}')
 kubectl get ingress istio-system -n istio-system -o jsonpath='{..host}' | tr ' ' '\n' | awk '{ printf "http://%s:'$INGRESS_PORT'\n", $1 }'
 ```
-
-Continue with 
-
-
-These tasks are a great place for beginners to further evaluate Istio’s features using this demo installation:
-https://istio.io/latest/docs/setup/getting-started/#next-steps
-https://istio.io/latest/docs/examples/microservices-istio/setup-kubernetes-cluster/
-
-[Request routing](https://istio.io/latest/docs/tasks/traffic-management/request-routing/)
-Fault injection
-Traffic shifting
-Querying metrics
-Visualizing metrics
-Accessing external services
-Visualizing your mesh
-Before you customize Istio for production use, see these resources:
-
-Deployment models
-Deployment best practices
-Pod requirements
-General installation instructions
-
-
-
-
-
-
